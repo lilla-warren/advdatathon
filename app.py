@@ -1,5 +1,5 @@
-# 🏥 HCT DATATHON 2025 - ERROR-FREE ENHANCED VERSION
-# Fixed column name mismatch
+# 🏥 HCT DATATHON 2025 - DEBUGGED VERSION
+# Let's debug the column name issue
 # ----------------------------------------------------------
 
 import streamlit as st
@@ -11,7 +11,6 @@ from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, roc_auc_score, confusion_matrix, roc_curve
-from sklearn.preprocessing import LabelEncoder
 import warnings
 warnings.filterwarnings("ignore")
 
@@ -28,7 +27,7 @@ if 'selected_features' not in st.session_state:
 # Configuration
 st.set_page_config(page_title="HCT Datathon 2025", layout="wide")
 
-# Generate sample data - FIXED COLUMN NAME
+# Generate sample data - LET'S CHECK WHAT COLUMNS ARE CREATED
 @st.cache_data
 def generate_data():
     np.random.seed(42)
@@ -47,16 +46,12 @@ def generate_data():
     risk = (data['age'] * 0.1 + data['bmi'] * 0.3 + data['blood_pressure'] * 0.05 + 
             data['cholesterol'] * 0.1 + data['smoking'] * 15 + data['family_history'] * 10 -
             data['exercise_hours'] * 2 + np.random.normal(0, 8, n))
-    data['health_risk'] = (risk > np.percentile(risk, 60)).astype(int)  # Top 40% as high risk
+    # Let's use a simple target name to avoid confusion
+    data['target'] = (risk > np.percentile(risk, 60)).astype(int)
     return pd.DataFrame(data)
 
 def main():
     st.title("🏥 HCT Datathon 2025 - Healthcare Analytics")
-    
-    # Sidebar for navigation
-    st.sidebar.title("Navigation")
-    page = st.sidebar.radio("Go to:", 
-                           ["📊 Data Overview", "🤖 Model Training", "📈 Results & Insights", "💡 Recommendations"])
     
     # Load data
     if 'df' not in st.session_state:
@@ -64,20 +59,30 @@ def main():
     
     df = st.session_state.df
     
+    # DEBUG: Let's see what columns we actually have
+    st.sidebar.title("Debug Info")
+    st.sidebar.write("Columns in dataset:", list(df.columns))
+    st.sidebar.write("Target column name: 'target'")
+    
+    # Sidebar for navigation
+    st.sidebar.title("Navigation")
+    page = st.sidebar.radio("Go to:", 
+                           ["📊 Data Overview", "🤖 Model Training", "📈 Results & Insights", "💡 Recommendations"])
+    
     # Page 1: Data Overview
     if page == "📊 Data Overview":
         st.header("📊 Data Overview & Exploration")
         
-        # Quick stats - FIXED: Using correct column name
+        # Quick stats - USING CORRECT COLUMN NAME 'target'
         col1, col2, col3, col4 = st.columns(4)
         with col1:
             st.metric("Total Samples", len(df))
         with col2:
             st.metric("Features", len(df.columns))
         with col3:
-            st.metric("High Risk Cases", df['health_risk'].sum())
+            st.metric("High Risk Cases", df['target'].sum())
         with col4:
-            st.metric("Low Risk Cases", len(df) - df['health_risk'].sum())
+            st.metric("Low Risk Cases", len(df) - df['target'].sum())
         
         # Data preview
         with st.expander("📋 Dataset Preview"):
@@ -93,16 +98,16 @@ def main():
         
         with col1:
             st.subheader("Target Distribution")
-            risk_counts = df['health_risk'].value_counts()
+            risk_counts = df['target'].value_counts()
             fig = px.pie(values=risk_counts.values, names=['Low Risk', 'High Risk'],
                         title="Health Risk Distribution")
             st.plotly_chart(fig, use_container_width=True)
         
         with col2:
             st.subheader("Age Distribution by Risk")
-            fig = px.box(df, x='health_risk', y='age', color='health_risk',
+            fig = px.box(df, x='target', y='age', color='target',
                         title="Age Distribution by Risk Level", 
-                        labels={'health_risk': 'Risk Level', 'age': 'Age'})
+                        labels={'target': 'Risk Level', 'age': 'Age'})
             st.plotly_chart(fig, use_container_width=True)
         
         # Correlation heatmap
@@ -130,7 +135,7 @@ def main():
         
         with col2:
             # Available features (excluding target)
-            available_features = [col for col in df.columns if col != 'health_risk']
+            available_features = [col for col in df.columns if col != 'target']
             features = st.multiselect(
                 "Select Features:",
                 available_features,
@@ -148,9 +153,9 @@ def main():
         if st.session_state.get('model_trained', False) and st.session_state.get('selected_features'):
             with st.spinner("Training models... This will take a few seconds."):
                 try:
-                    # Prepare data
+                    # Prepare data - USING 'target' as target column
                     X = df[st.session_state.selected_features]
-                    y = df['health_risk']
+                    y = df['target']
                     
                     # Handle categorical features if any
                     X_encoded = pd.get_dummies(X, drop_first=True) if X.select_dtypes(include=['object']).any().any() else X
@@ -381,7 +386,7 @@ def main():
         col1, col2, col3 = st.columns(3)
         
         with col1:
-            high_risk_pct = (df['health_risk'].sum() / len(df)) * 100
+            high_risk_pct = (df['target'].sum() / len(df)) * 100
             st.metric("High Risk Population", f"{high_risk_pct:.1f}%")
         
         with col2:
