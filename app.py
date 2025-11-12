@@ -13,17 +13,15 @@ import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from sklearn.model_selection import train_test_split, cross_val_score, GridSearchCV
-from sklearn.preprocessing import StandardScaler, LabelEncoder, OneHotEncoder
+from sklearn.preprocessing import StandardScaler, LabelEncoder
 from sklearn.linear_model import LogisticRegression
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
 from sklearn.svm import SVC
 from sklearn.metrics import (
     accuracy_score, precision_score, recall_score, f1_score,
-    roc_auc_score, confusion_matrix, roc_curve, precision_recall_curve,
-    classification_report
+    roc_auc_score, confusion_matrix, roc_curve
 )
-from sklearn.inspection import permutation_importance
 import shap
 import joblib
 import io
@@ -81,7 +79,7 @@ class AdvancedHealthcareAnalytics:
         self.df = None
         self.target_col = None
         self.models = {}
-        self.results = {}
+        self.results = pd.DataFrame()  # Initialize as empty DataFrame instead of None
         self.shap_values = None
         self.explainer = None
         
@@ -328,9 +326,9 @@ def main():
             
             col1, col2 = st.columns(2)
             with col1:
-                x_feature = st.selectbox("X-axis feature:", numeric_df.columns)
+                x_feature = st.selectbox("X-axis feature:", numeric_df.columns, key="x_feature_eda")
             with col2:
-                y_feature = st.selectbox("Y-axis feature:", numeric_df.columns)
+                y_feature = st.selectbox("Y-axis feature:", numeric_df.columns, key="y_feature_eda")
             
             if x_feature and y_feature:
                 color_feature = analytics.target_col if analytics.target_col else None
@@ -478,15 +476,8 @@ def main():
                             "CV F1-Std": cv_scores.std()
                         }
                         results.append(metrics)
-                        
-                        # Feature importance
-                        if hasattr(best_model, 'feature_importances_'):
-                            importance_df = pd.DataFrame({
-                                'feature': X_encoded.columns,
-                                'importance': best_model.feature_importances_
-                            }).sort_values('importance', ascending=False)
-                            feature_importance_data.append(importance_df)
                     
+                    # Store results
                     analytics.results = pd.DataFrame(results)
                     
                     st.success("✅ All models trained successfully!")
@@ -516,15 +507,16 @@ def main():
                     for model_name in selected_models:
                         if model_name in analytics.models:
                             model = analytics.models[model_name]
-                            y_prob = model.predict_proba(X_test_scaled)[:, 1]
-                            fpr, tpr, _ = roc_curve(y_test, y_prob)
-                            auc_score = roc_auc_score(y_test, y_prob)
-                            
-                            fig.add_trace(go.Scatter(
-                                x=fpr, y=tpr,
-                                name=f'{model_name} (AUC = {auc_score:.3f})',
-                                line=dict(width=2)
-                            ))
+                            if hasattr(model, "predict_proba"):
+                                y_prob = model.predict_proba(X_test_scaled)[:, 1]
+                                fpr, tpr, _ = roc_curve(y_test, y_prob)
+                                auc_score = roc_auc_score(y_test, y_prob)
+                                
+                                fig.add_trace(go.Scatter(
+                                    x=fpr, y=tpr,
+                                    name=f'{model_name} (AUC = {auc_score:.3f})',
+                                    line=dict(width=2)
+                                ))
                     
                     fig.add_trace(go.Scatter(
                         x=[0, 1], y=[0, 1],
@@ -564,20 +556,21 @@ def main():
                 
                 # Confusion matrices
                 st.subheader("📈 Confusion Matrices")
-                selected_model_cm = st.selectbox("Select model for confusion matrix:", selected_models)
-                
-                if selected_model_cm in analytics.models:
-                    model = analytics.models[selected_model_cm]
-                    y_pred = model.predict(X_test_scaled)
-                    cm = confusion_matrix(y_test, y_pred)
+                if analytics.models:
+                    selected_model_cm = st.selectbox("Select model for confusion matrix:", list(analytics.models.keys()))
                     
-                    fig = px.imshow(cm, text_auto=True,
-                                  labels=dict(x="Predicted", y="Actual", color="Count"),
-                                  x=['Class 0', 'Class 1'],
-                                  y=['Class 0', 'Class 1'],
-                                  title=f'Confusion Matrix - {selected_model_cm}',
-                                  color_continuous_scale='Blues')
-                    st.plotly_chart(fig, use_container_width=True)
+                    if selected_model_cm in analytics.models:
+                        model = analytics.models[selected_model_cm]
+                        y_pred = model.predict(X_test_scaled)
+                        cm = confusion_matrix(y_test, y_pred)
+                        
+                        fig = px.imshow(cm, text_auto=True,
+                                      labels=dict(x="Predicted", y="Actual", color="Count"),
+                                      x=['Class 0', 'Class 1'],
+                                      y=['Class 0', 'Class 1'],
+                                      title=f'Confusion Matrix - {selected_model_cm}',
+                                      color_continuous_scale='Blues')
+                        st.plotly_chart(fig, use_container_width=True)
         
         # ----------------------------------------------------------
         # 6️⃣ Enhanced Explainability & Transparency
@@ -647,35 +640,32 @@ def main():
                             fig, ax = plt.subplots(figsize=(10, 6))
                             shap.waterfall_plot(shap_values[instance_idx], show=False)
                             st.pyplot(fig)
-                        
-                        with col2:
-                            # Force plot
-                            fig, ax = plt.subplots(figsize=(10, 3))
-                            shap.force_plot(shap_values[instance_idx], matplotlib=True, show=False)
-                            st.pyplot(fig)
                             
                 except Exception as e:
                     st.error(f"SHAP analysis failed: {str(e)}")
                     st.info("Trying alternative feature importance method...")
                     
                     # Alternative: Permutation importance
-                    from sklearn.inspection import permutation_importance
-                    
-                    X_train, X_test, y_train, y_test = train_test_split(
-                        X_encoded, df[analytics.target_col], test_size=0.3, random_state=42
-                    )
-                    
-                    result = permutation_importance(model, X_test, y_test, n_repeats=10, random_state=42)
-                    
-                    importance_df = pd.DataFrame({
-                        'feature': X_encoded.columns,
-                        'importance': result.importances_mean,
-                        'std': result.importances_std
-                    }).sort_values('importance', ascending=False)
-                    
-                    fig = px.bar(importance_df.head(15), x='importance', y='feature',
-                               error_x='std', title='Feature Importance (Permutation)')
-                    st.plotly_chart(fig, use_container_width=True)
+                    try:
+                        from sklearn.inspection import permutation_importance
+                        
+                        X_train, X_test, y_train, y_test = train_test_split(
+                            X_encoded, df[analytics.target_col], test_size=0.3, random_state=42
+                        )
+                        
+                        result = permutation_importance(model, X_test, y_test, n_repeats=10, random_state=42)
+                        
+                        importance_df = pd.DataFrame({
+                            'feature': X_encoded.columns,
+                            'importance': result.importances_mean,
+                            'std': result.importances_std
+                        }).sort_values('importance', ascending=False)
+                        
+                        fig = px.bar(importance_df.head(15), x='importance', y='feature',
+                                   error_x='std', title='Feature Importance (Permutation)')
+                        st.plotly_chart(fig, use_container_width=True)
+                    except Exception as e2:
+                        st.error(f"Alternative method also failed: {str(e2)}")
         
         # ----------------------------------------------------------
         # 7️⃣ Enhanced Prescriptive Analytics
@@ -683,110 +673,114 @@ def main():
         elif analysis_type == "💡 Prescriptive Insights":
             st.markdown('<div class="section-header">💡 Advanced Prescriptive Analytics</div>', unsafe_allow_html=True)
             
-            if not analytics.models:
+            if not analytics.models or analytics.results.empty:
                 st.warning("⚠️ Please train models first to generate insights.")
                 return
             
             st.subheader("🎯 Actionable Recommendations")
             
             # Get best model
-            best_model_name = analytics.results.loc[analytics.results['F1-Score'].idxmax(), 'Model']
-            best_model = analytics.models[best_model_name]
-            
-            st.success(f"Using {best_model_name} for insights generation")
-            
-            # Feature importance analysis
-            if hasattr(best_model, 'feature_importances_'):
-                X = df.drop(columns=[analytics.target_col])
-                feature_importance = pd.DataFrame({
-                    'feature': X.columns,
-                    'importance': best_model.feature_importances_
-                }).sort_values('importance', ascending=False)
+            try:
+                best_model_name = analytics.results.loc[analytics.results['F1-Score'].idxmax(), 'Model']
+                best_model = analytics.models[best_model_name]
                 
-                top_features = feature_importance.head(5)
+                st.success(f"Using {best_model_name} for insights generation")
                 
-                st.subheader("🚨 Top 5 Intervention Targets")
-                
-                for idx, (_, row) in enumerate(top_features.iterrows(), 1):
-                    feature = row['feature']
-                    importance = row['importance']
+                # Feature importance analysis
+                if hasattr(best_model, 'feature_importances_'):
+                    X = df.drop(columns=[analytics.target_col])
+                    feature_importance = pd.DataFrame({
+                        'feature': X.columns,
+                        'importance': best_model.feature_importances_
+                    }).sort_values('importance', ascending=False)
                     
-                    with st.expander(f"{idx}. {feature} (Importance: {importance:.3f})"):
-                        if 'bmi' in feature.lower():
-                            st.markdown("""
-                            **Recommended Interventions:**
-                            - Implement weight management programs
-                            - Provide nutritional counseling
-                            - Encourage regular physical activity
-                            - Monitor progress with regular check-ups
-                            """)
-                        elif 'blood' in feature.lower() or 'pressure' in feature.lower():
-                            st.markdown("""
-                            **Recommended Interventions:**
-                            - Regular blood pressure monitoring
-                            - Dietary modifications (reduce sodium)
-                            - Stress management techniques
-                            - Medication adherence support
-                            """)
-                        elif 'glucose' in feature.lower() or 'sugar' in feature.lower():
-                            st.markdown("""
-                            **Recommended Interventions:**
-                            - Blood glucose monitoring
-                            - Carbohydrate counting education
-                            - Physical activity planning
-                            - Medication management
-                            """)
-                        elif 'cholesterol' in feature.lower():
-                            st.markdown("""
-                            **Recommended Interventions:**
-                            - Lipid profile monitoring
-                            - Dietary changes (reduce saturated fats)
-                            - Statin therapy consideration
-                            - Regular exercise
-                            """)
-                        else:
-                            st.markdown("""
-                            **General Interventions:**
-                            - Regular health screenings
-                            - Lifestyle modification programs
-                            - Patient education sessions
-                            - Continuous monitoring and follow-up
-                            """)
-            
-            # Risk stratification
-            st.subheader("📊 Patient Risk Stratification")
-            
-            # Simulate risk scores
-            X = df.drop(columns=[analytics.target_col])
-            if hasattr(best_model, 'predict_proba'):
-                risk_scores = best_model.predict_proba(X)[:, 1]
+                    top_features = feature_importance.head(5)
+                    
+                    st.subheader("🚨 Top 5 Intervention Targets")
+                    
+                    for idx, (_, row) in enumerate(top_features.iterrows(), 1):
+                        feature = row['feature']
+                        importance = row['importance']
+                        
+                        with st.expander(f"{idx}. {feature} (Importance: {importance:.3f})"):
+                            if 'bmi' in feature.lower():
+                                st.markdown("""
+                                **Recommended Interventions:**
+                                - Implement weight management programs
+                                - Provide nutritional counseling
+                                - Encourage regular physical activity
+                                - Monitor progress with regular check-ups
+                                """)
+                            elif 'blood' in feature.lower() or 'pressure' in feature.lower():
+                                st.markdown("""
+                                **Recommended Interventions:**
+                                - Regular blood pressure monitoring
+                                - Dietary modifications (reduce sodium)
+                                - Stress management techniques
+                                - Medication adherence support
+                                """)
+                            elif 'glucose' in feature.lower() or 'sugar' in feature.lower():
+                                st.markdown("""
+                                **Recommended Interventions:**
+                                - Blood glucose monitoring
+                                - Carbohydrate counting education
+                                - Physical activity planning
+                                - Medication management
+                                """)
+                            elif 'cholesterol' in feature.lower():
+                                st.markdown("""
+                                **Recommended Interventions:**
+                                - Lipid profile monitoring
+                                - Dietary changes (reduce saturated fats)
+                                - Statin therapy consideration
+                                - Regular exercise
+                                """)
+                            else:
+                                st.markdown("""
+                                **General Interventions:**
+                                - Regular health screenings
+                                - Lifestyle modification programs
+                                - Patient education sessions
+                                - Continuous monitoring and follow-up
+                                """)
                 
-                # Create risk categories
-                low_risk = (risk_scores < 0.3).sum()
-                medium_risk = ((risk_scores >= 0.3) & (risk_scores < 0.7)).sum()
-                high_risk = (risk_scores >= 0.7).sum()
+                # Risk stratification
+                st.subheader("📊 Patient Risk Stratification")
                 
-                risk_data = {
-                    'Risk Level': ['Low Risk', 'Medium Risk', 'High Risk'],
-                    'Count': [low_risk, medium_risk, high_risk],
-                    'Color': ['#2ecc71', '#f39c12', '#e74c3c']
-                }
-                
-                fig = px.pie(risk_data, values='Count', names='Risk Level',
-                           title='Patient Risk Stratification',
-                           color='Risk Level', color_discrete_map=dict(zip(risk_data['Risk Level'], risk_data['Color'])))
-                st.plotly_chart(fig, use_container_width=True)
-                
-                # Resource allocation recommendations
-                st.subheader("💼 Resource Allocation Strategy")
-                
-                col1, col2, col3 = st.columns(3)
-                with col1:
-                    st.metric("Low Risk Patients", low_risk, "Minimal intervention")
-                with col2:
-                    st.metric("Medium Risk Patients", medium_risk, "Preventive care")
-                with col3:
-                    st.metric("High Risk Patients", high_risk, "Intensive management")
+                # Simulate risk scores
+                X = df.drop(columns=[analytics.target_col])
+                if hasattr(best_model, 'predict_proba'):
+                    risk_scores = best_model.predict_proba(X)[:, 1]
+                    
+                    # Create risk categories
+                    low_risk = (risk_scores < 0.3).sum()
+                    medium_risk = ((risk_scores >= 0.3) & (risk_scores < 0.7)).sum()
+                    high_risk = (risk_scores >= 0.7).sum()
+                    
+                    risk_data = {
+                        'Risk Level': ['Low Risk', 'Medium Risk', 'High Risk'],
+                        'Count': [low_risk, medium_risk, high_risk],
+                        'Color': ['#2ecc71', '#f39c12', '#e74c3c']
+                    }
+                    
+                    fig = px.pie(risk_data, values='Count', names='Risk Level',
+                               title='Patient Risk Stratification',
+                               color='Risk Level', color_discrete_map=dict(zip(risk_data['Risk Level'], risk_data['Color'])))
+                    st.plotly_chart(fig, use_container_width=True)
+                    
+                    # Resource allocation recommendations
+                    st.subheader("💼 Resource Allocation Strategy")
+                    
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        st.metric("Low Risk Patients", low_risk, "Minimal intervention")
+                    with col2:
+                        st.metric("Medium Risk Patients", medium_risk, "Preventive care")
+                    with col3:
+                        st.metric("High Risk Patients", high_risk, "Intensive management")
+                        
+            except Exception as e:
+                st.error(f"Error generating prescriptive insights: {str(e)}")
         
         # ----------------------------------------------------------
         # 8️⃣ Enhanced Ethics & Governance
@@ -829,7 +823,7 @@ def main():
             # Bias detection
             st.subheader("⚖️ Bias and Fairness Analysis")
             
-            if analytics.target_col and len(analytics.models) > 0:
+            if analytics.target_col:
                 # Simple bias check based on feature distributions
                 sensitive_features = st.multiselect(
                     "Select potential sensitive features for bias analysis:",
@@ -899,11 +893,12 @@ def main():
             )
         
         # ----------------------------------------------------------
-        # 9️⃣ Enhanced Downloadables & Export
+        # 9️⃣ Enhanced Downloadables & Export - FIXED LINES
         # ----------------------------------------------------------
         st.sidebar.markdown("---")
         st.sidebar.header("📤 Export Results")
         
+        # FIXED: Check if results exist and is not empty
         if analytics.results is not None and not analytics.results.empty:
             # Download model results
             csv_buffer = io.BytesIO()
@@ -917,17 +912,20 @@ def main():
             
             # Download best model
             if analytics.models:
-                best_model_name = analytics.results.loc[analytics.results['F1-Score'].idxmax(), 'Model']
-                best_model = analytics.models[best_model_name]
-                
-                model_buffer = io.BytesIO()
-                joblib.dump(best_model, model_buffer)
-                st.sidebar.download_button(
-                    "Download Best Model",
-                    data=model_buffer.getvalue(),
-                    file_name=f"best_model_{best_model_name}.joblib",
-                    mime="application/octet-stream"
-                )
+                try:
+                    best_model_name = analytics.results.loc[analytics.results['F1-Score'].idxmax(), 'Model']
+                    best_model = analytics.models[best_model_name]
+                    
+                    model_buffer = io.BytesIO()
+                    joblib.dump(best_model, model_buffer)
+                    st.sidebar.download_button(
+                        "Download Best Model",
+                        data=model_buffer.getvalue(),
+                        file_name=f"best_model_{best_model_name}.joblib",
+                        mime="application/octet-stream"
+                    )
+                except Exception as e:
+                    st.sidebar.warning("Could not export model")
         
         # Project documentation
         st.sidebar.markdown("---")
