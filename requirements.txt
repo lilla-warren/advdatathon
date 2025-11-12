@@ -6,10 +6,3 @@ seaborn
 plotly
 scikit-learn
 shap
-# Add to your imports at the top
-try:
-    import shap
-    SHAP_AVAILABLE = True
-except ImportError:
-    SHAP_AVAILABLE = False
-    st.sidebar.warning("SHAP not installed - install with: pip install shap")
