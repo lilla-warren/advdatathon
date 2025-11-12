@@ -1,411 +1,311 @@
-# 🏥 HCT DATATHON 2025 - DEBUGGED VERSION
-# Let's debug the column name issue
+# 🏥 HCT DATATHON 2025 - OPTIMIZED HEALTHCARE ANALYTICS PLATFORM
+# Lightweight and fast Streamlit app
 # ----------------------------------------------------------
 
 import streamlit as st
 import pandas as pd
 import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
 import plotly.express as px
 import plotly.graph_objects as go
 from sklearn.model_selection import train_test_split
-from sklearn.ensemble import RandomForestClassifier
+from sklearn.preprocessing import StandardScaler, LabelEncoder
 from sklearn.linear_model import LogisticRegression
+from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, roc_auc_score, confusion_matrix, roc_curve
 import warnings
 warnings.filterwarnings("ignore")
 
-# Initialize session state
-if 'model_trained' not in st.session_state:
-    st.session_state.model_trained = False
+# Page configuration - SIMPLIFIED
+st.set_page_config(
+    page_title="HCT Datathon 2025",
+    page_icon="🏥",
+    layout="wide",
+    initial_sidebar_state="collapsed"  # Start with sidebar collapsed for better performance
+)
+
+# Custom CSS - MINIMAL
+st.markdown("""
+<style>
+    .main-header { font-size: 2rem; color: #1f77b4; text-align: center; margin-bottom: 1rem; }
+    .section-header { font-size: 1.5rem; color: #2e86ab; margin: 1rem 0; }
+</style>
+""", unsafe_allow_html=True)
+
+# Initialize session state for caching
+if 'df' not in st.session_state:
+    st.session_state.df = None
+if 'target_col' not in st.session_state:
+    st.session_state.target_col = None
 if 'models' not in st.session_state:
     st.session_state.models = {}
 if 'results' not in st.session_state:
     st.session_state.results = pd.DataFrame()
-if 'selected_features' not in st.session_state:
-    st.session_state.selected_features = []
 
-# Configuration
-st.set_page_config(page_title="HCT Datathon 2025", layout="wide")
-
-# Generate sample data - LET'S CHECK WHAT COLUMNS ARE CREATED
 @st.cache_data
-def generate_data():
+def load_data(uploaded_file):
+    """Cache data loading"""
+    return pd.read_csv(uploaded_file)
+
+@st.cache_data
+def generate_sample_data():
+    """Generate sample data for demo"""
     np.random.seed(42)
-    n = 500
+    n_samples = 500  # Reduced for performance
+    
     data = {
-        'age': np.random.normal(45, 15, n).astype(int),
-        'bmi': np.random.normal(25, 5, n),
-        'blood_pressure': np.random.normal(120, 15, n),
-        'cholesterol': np.random.normal(200, 40, n),
-        'glucose': np.random.normal(100, 20, n),
-        'exercise_hours': np.random.exponential(3, n),
-        'smoking': np.random.choice([0, 1], n, p=[0.7, 0.3]),
-        'family_history': np.random.choice([0, 1], n, p=[0.6, 0.4]),
+        'age': np.random.normal(45, 15, n_samples).astype(int),
+        'bmi': np.random.normal(25, 5, n_samples),
+        'blood_pressure': np.random.normal(120, 15, n_samples),
+        'cholesterol': np.random.normal(200, 40, n_samples),
+        'glucose': np.random.normal(100, 20, n_samples),
+        'exercise_hours': np.random.exponential(3, n_samples),
+        'smoking': np.random.choice([0, 1], n_samples, p=[0.7, 0.3]),
+        'family_history': np.random.choice([0, 1], n_samples, p=[0.6, 0.4]),
     }
-    # Realistic risk calculation
-    risk = (data['age'] * 0.1 + data['bmi'] * 0.3 + data['blood_pressure'] * 0.05 + 
-            data['cholesterol'] * 0.1 + data['smoking'] * 15 + data['family_history'] * 10 -
-            data['exercise_hours'] * 2 + np.random.normal(0, 8, n))
-    # Let's use a simple target name to avoid confusion
-    data['target'] = (risk > np.percentile(risk, 60)).astype(int)
+    
+    # Simple target creation
+    risk_score = (
+        data['age'] * 0.1 + data['bmi'] * 0.3 + data['smoking'] * 10 + 
+        np.random.normal(0, 5, n_samples)
+    )
+    data['health_risk'] = (risk_score > risk_score.mean()).astype(int)
+    
     return pd.DataFrame(data)
 
 def main():
-    st.title("🏥 HCT Datathon 2025 - Healthcare Analytics")
+    # Simple header
+    st.markdown('<div class="main-header">🏥 HCT Datathon 2025 - Healthcare Analytics</div>', unsafe_allow_html=True)
     
-    # Load data
-    if 'df' not in st.session_state:
-        st.session_state.df = generate_data()
+    # Sidebar - SIMPLIFIED
+    with st.sidebar:
+        st.header("📁 Data Management")
+        
+        use_sample = st.checkbox("Use Sample Data", value=True)
+        if not use_sample:
+            uploaded_file = st.file_uploader("Upload CSV", type=["csv"])
+            if uploaded_file:
+                st.session_state.df = load_data(uploaded_file)
+        else:
+            if st.button("Generate Sample Data") or st.session_state.df is None:
+                st.session_state.df = generate_sample_data()
+        
+        if st.session_state.df is not None:
+            st.session_state.target_col = st.selectbox("Select Target Variable:", st.session_state.df.columns)
+            
+            analysis_type = st.radio(
+                "Select Analysis:",
+                ["📊 Data Overview", "🤖 Quick Modeling", "📈 Results"]
+            )
+    
+    # Main content
+    if st.session_state.df is None:
+        st.info("👈 Please load data from the sidebar to begin analysis")
+        return
     
     df = st.session_state.df
     
-    # DEBUG: Let's see what columns we actually have
-    st.sidebar.title("Debug Info")
-    st.sidebar.write("Columns in dataset:", list(df.columns))
-    st.sidebar.write("Target column name: 'target'")
-    
-    # Sidebar for navigation
-    st.sidebar.title("Navigation")
-    page = st.sidebar.radio("Go to:", 
-                           ["📊 Data Overview", "🤖 Model Training", "📈 Results & Insights", "💡 Recommendations"])
-    
-    # Page 1: Data Overview
-    if page == "📊 Data Overview":
-        st.header("📊 Data Overview & Exploration")
+    if analysis_type == "📊 Data Overview":
+        st.markdown('<div class="section-header">📊 Data Overview</div>', unsafe_allow_html=True)
         
-        # Quick stats - USING CORRECT COLUMN NAME 'target'
-        col1, col2, col3, col4 = st.columns(4)
+        # Basic info in columns
+        col1, col2, col3 = st.columns(3)
         with col1:
-            st.metric("Total Samples", len(df))
+            st.metric("Samples", len(df))
         with col2:
             st.metric("Features", len(df.columns))
         with col3:
-            st.metric("High Risk Cases", df['target'].sum())
-        with col4:
-            st.metric("Low Risk Cases", len(df) - df['target'].sum())
+            st.metric("Memory", f"{df.memory_usage(deep=True).sum() / 1024**2:.1f} MB")
         
         # Data preview
-        with st.expander("📋 Dataset Preview"):
-            st.dataframe(df.head(10), use_container_width=True)
-            st.write(f"**Shape:** {df.shape}")
+        st.subheader("Data Preview")
+        st.dataframe(df.head(), use_container_width=True)
         
-        # Basic statistics
-        with st.expander("📈 Basic Statistics"):
-            st.dataframe(df.describe(), use_container_width=True)
+        # Quick stats
+        st.subheader("Quick Statistics")
+        st.dataframe(df.describe(), use_container_width=True)
         
-        # Visualizations
+        # Simple visualizations
+        st.subheader("Basic Visualizations")
+        
         col1, col2 = st.columns(2)
         
         with col1:
-            st.subheader("Target Distribution")
-            risk_counts = df['target'].value_counts()
-            fig = px.pie(values=risk_counts.values, names=['Low Risk', 'High Risk'],
-                        title="Health Risk Distribution")
-            st.plotly_chart(fig, use_container_width=True)
+            if st.session_state.target_col:
+                # Target distribution
+                fig = px.pie(df, names=st.session_state.target_col, 
+                           title=f"Target Distribution - {st.session_state.target_col}")
+                st.plotly_chart(fig, use_container_width=True)
         
         with col2:
-            st.subheader("Age Distribution by Risk")
-            fig = px.box(df, x='target', y='age', color='target',
-                        title="Age Distribution by Risk Level", 
-                        labels={'target': 'Risk Level', 'age': 'Age'})
-            st.plotly_chart(fig, use_container_width=True)
-        
-        # Correlation heatmap
-        st.subheader("Feature Correlations")
-        numeric_df = df.select_dtypes(include=[np.number])
-        corr_matrix = numeric_df.corr()
-        fig = px.imshow(corr_matrix, title="Correlation Heatmap", 
-                       color_continuous_scale='RdBu_r', aspect="auto")
-        st.plotly_chart(fig, use_container_width=True)
+            # Correlation heatmap (numeric only)
+            numeric_df = df.select_dtypes(include=np.number)
+            if len(numeric_df.columns) > 1:
+                corr = numeric_df.corr()
+                fig = px.imshow(corr, title="Correlation Heatmap", aspect="auto")
+                st.plotly_chart(fig, use_container_width=True)
     
-    # Page 2: Model Training
-    elif page == "🤖 Model Training":
-        st.header("🤖 Predictive Model Training")
+    elif analysis_type == "🤖 Quick Modeling":
+        st.markdown('<div class="section-header">🤖 Quick Predictive Modeling</div>', unsafe_allow_html=True)
         
-        # Model configuration
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            model_choice = st.selectbox(
-                "Select Model:",
-                ["Random Forest", "Logistic Regression", "Both"]
-            )
-            
-            test_size = st.slider("Test Size %", 10, 40, 30)
-        
-        with col2:
-            # Available features (excluding target)
-            available_features = [col for col in df.columns if col != 'target']
-            features = st.multiselect(
-                "Select Features:",
-                available_features,
-                default=['age', 'bmi', 'blood_pressure', 'smoking']
-            )
-            
-            if st.button("🚀 Train Models", type="primary", use_container_width=True):
-                if not features:
-                    st.error("Please select at least one feature")
-                else:
-                    st.session_state.model_trained = True
-                    st.session_state.selected_features = features
-        
-        # Train models when button is clicked
-        if st.session_state.get('model_trained', False) and st.session_state.get('selected_features'):
-            with st.spinner("Training models... This will take a few seconds."):
-                try:
-                    # Prepare data - USING 'target' as target column
-                    X = df[st.session_state.selected_features]
-                    y = df['target']
-                    
-                    # Handle categorical features if any
-                    X_encoded = pd.get_dummies(X, drop_first=True) if X.select_dtypes(include=['object']).any().any() else X
-                    
-                    # Split data - with safe stratification
-                    unique_classes = len(y.unique())
-                    can_stratify = unique_classes > 1 and min(y.value_counts()) > 1
-                    
-                    if can_stratify:
-                        X_train, X_test, y_train, y_test = train_test_split(
-                            X_encoded, y, test_size=test_size/100, random_state=42, stratify=y
-                        )
-                    else:
-                        X_train, X_test, y_train, y_test = train_test_split(
-                            X_encoded, y, test_size=test_size/100, random_state=42
-                        )
-                    
-                    # Train models
-                    models = {}
-                    results = []
-                    
-                    if model_choice in ["Random Forest", "Both"]:
-                        rf = RandomForestClassifier(n_estimators=50, random_state=42)
-                        rf.fit(X_train, y_train)
-                        models['Random Forest'] = rf
-                        
-                        y_pred_rf = rf.predict(X_test)
-                        y_prob_rf = rf.predict_proba(X_test)[:, 1]
-                        
-                        results.append({
-                            "Model": "Random Forest",
-                            "Accuracy": accuracy_score(y_test, y_pred_rf),
-                            "Precision": precision_score(y_test, y_pred_rf, zero_division=0),
-                            "Recall": recall_score(y_test, y_pred_rf, zero_division=0),
-                            "F1-Score": f1_score(y_test, y_pred_rf, zero_division=0),
-                            "ROC-AUC": roc_auc_score(y_test, y_prob_rf) if len(np.unique(y_test)) > 1 else 0.5
-                        })
-                    
-                    if model_choice in ["Logistic Regression", "Both"]:
-                        lr = LogisticRegression(max_iter=1000, random_state=42)
-                        lr.fit(X_train, y_train)
-                        models['Logistic Regression'] = lr
-                        
-                        y_pred_lr = lr.predict(X_test)
-                        y_prob_lr = lr.predict_proba(X_test)[:, 1]
-                        
-                        results.append({
-                            "Model": "Logistic Regression",
-                            "Accuracy": accuracy_score(y_test, y_pred_lr),
-                            "Precision": precision_score(y_test, y_pred_lr, zero_division=0),
-                            "Recall": recall_score(y_test, y_pred_lr, zero_division=0),
-                            "F1-Score": f1_score(y_test, y_pred_lr, zero_division=0),
-                            "ROC-AUC": roc_auc_score(y_test, y_prob_lr) if len(np.unique(y_test)) > 1 else 0.5
-                        })
-                    
-                    # Store results
-                    st.session_state.models = models
-                    st.session_state.results = pd.DataFrame(results)
-                    st.session_state.X_test = X_test
-                    st.session_state.y_test = y_test
-                    st.session_state.feature_names = X_encoded.columns.tolist()
-                    
-                    st.success("✅ Models trained successfully!")
-                    
-                except Exception as e:
-                    st.error(f"Error during training: {str(e)}")
-    
-    # Page 3: Results & Insights
-    elif page == "📈 Results & Insights":
-        st.header("📈 Model Results & Performance")
-        
-        if not st.session_state.get('models') or st.session_state.results.empty:
-            st.info("👈 Please train models first in the 'Model Training' section")
+        if not st.session_state.target_col:
+            st.warning("Please select a target variable first")
             return
         
-        results_df = st.session_state.results
-        models = st.session_state.models
+        # Simple model configuration
+        st.subheader("Model Configuration")
         
-        # Performance metrics
-        st.subheader("📊 Performance Comparison")
-        styled_results = results_df.style.format({
+        model_choice = st.selectbox(
+            "Select Model:",
+            ["Logistic Regression", "Random Forest", "Both"]
+        )
+        
+        test_size = st.slider("Test Size %", 10, 40, 30)
+        
+        if st.button("🚀 Train Model", type="primary"):
+            with st.spinner("Training model..."):
+                # Prepare data
+                X = df.drop(columns=[st.session_state.target_col])
+                y = df[st.session_state.target_col]
+                
+                # Handle categorical data simply
+                X = pd.get_dummies(X, drop_first=True)
+                
+                # Encode target if needed
+                if y.dtype == 'object':
+                    le = LabelEncoder()
+                    y = le.fit_transform(y)
+                
+                # Split data
+                X_train, X_test, y_train, y_test = train_test_split(
+                    X, y, test_size=test_size/100, random_state=42, stratify=y
+                )
+                
+                # Scale features
+                scaler = StandardScaler()
+                X_train_scaled = scaler.fit_transform(X_train)
+                X_test_scaled = scaler.transform(X_test)
+                
+                # Train models
+                results = []
+                
+                if model_choice in ["Logistic Regression", "Both"]:
+                    lr = LogisticRegression(max_iter=1000, random_state=42)
+                    lr.fit(X_train_scaled, y_train)
+                    st.session_state.models['Logistic Regression'] = lr
+                    
+                    y_pred = lr.predict(X_test_scaled)
+                    y_prob = lr.predict_proba(X_test_scaled)[:, 1]
+                    
+                    results.append({
+                        "Model": "Logistic Regression",
+                        "Accuracy": accuracy_score(y_test, y_pred),
+                        "Precision": precision_score(y_test, y_pred),
+                        "Recall": recall_score(y_test, y_pred),
+                        "F1-Score": f1_score(y_test, y_pred),
+                        "ROC-AUC": roc_auc_score(y_test, y_prob)
+                    })
+                
+                if model_choice in ["Random Forest", "Both"]:
+                    rf = RandomForestClassifier(n_estimators=50, random_state=42)  # Reduced for speed
+                    rf.fit(X_train_scaled, y_train)
+                    st.session_state.models['Random Forest'] = rf
+                    
+                    y_pred = rf.predict(X_test_scaled)
+                    y_prob = rf.predict_proba(X_test_scaled)[:, 1]
+                    
+                    results.append({
+                        "Model": "Random Forest",
+                        "Accuracy": accuracy_score(y_test, y_pred),
+                        "Precision": precision_score(y_test, y_pred),
+                        "Recall": recall_score(y_test, y_pred),
+                        "F1-Score": f1_score(y_test, y_pred),
+                        "ROC-AUC": roc_auc_score(y_test, y_prob)
+                    })
+                
+                st.session_state.results = pd.DataFrame(results)
+                st.success("✅ Model training completed!")
+    
+    elif analysis_type == "📈 Results":
+        st.markdown('<div class="section-header">📈 Model Results</div>', unsafe_allow_html=True)
+        
+        if st.session_state.results.empty:
+            st.info("Please train models first in the 'Quick Modeling' section")
+            return
+        
+        # Display results
+        st.subheader("Performance Metrics")
+        st.dataframe(st.session_state.results.style.format({
             'Accuracy': '{:.3f}', 'Precision': '{:.3f}', 'Recall': '{:.3f}', 
             'F1-Score': '{:.3f}', 'ROC-AUC': '{:.3f}'
-        }).highlight_max(subset=['Accuracy', 'F1-Score', 'ROC-AUC'], color='lightgreen')
+        }), use_container_width=True)
         
-        st.dataframe(styled_results, use_container_width=True)
-        
-        # Visualizations
+        # Simple visualizations
         col1, col2 = st.columns(2)
         
         with col1:
-            st.subheader("ROC Curves")
-            fig = go.Figure()
-            
-            for model_name, model in models.items():
-                if hasattr(model, "predict_proba"):
-                    y_prob = model.predict_proba(st.session_state.X_test)[:, 1]
-                    fpr, tpr, _ = roc_curve(st.session_state.y_test, y_prob)
-                    auc_score = roc_auc_score(st.session_state.y_test, y_prob)
-                    
-                    fig.add_trace(go.Scatter(
-                        x=fpr, y=tpr, 
-                        name=f'{model_name} (AUC = {auc_score:.3f})',
-                        line=dict(width=2)
-                    ))
-            
-            fig.add_trace(go.Scatter(
-                x=[0, 1], y=[0, 1],
-                name='Random Classifier',
-                line=dict(dash='dash', color='gray')
-            ))
-            
-            fig.update_layout(
-                title='ROC Curves',
-                xaxis_title='False Positive Rate',
-                yaxis_title='True Positive Rate'
-            )
-            st.plotly_chart(fig, use_container_width=True)
+            # ROC Curve for first model
+            if 'Logistic Regression' in st.session_state.models:
+                model = st.session_state.models['Logistic Regression']
+                X = df.drop(columns=[st.session_state.target_col])
+                X = pd.get_dummies(X, drop_first=True)
+                y = df[st.session_state.target_col]
+                if y.dtype == 'object':
+                    le = LabelEncoder()
+                    y = le.fit_transform(y)
+                
+                X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42)
+                scaler = StandardScaler()
+                X_test_scaled = scaler.fit_transform(X_test)
+                
+                y_prob = model.predict_proba(X_test_scaled)[:, 1]
+                fpr, tpr, _ = roc_curve(y_test, y_prob)
+                auc_score = roc_auc_score(y_test, y_prob)
+                
+                fig = go.Figure()
+                fig.add_trace(go.Scatter(x=fpr, y=tpr, name=f'ROC (AUC = {auc_score:.3f})'))
+                fig.add_trace(go.Scatter(x=[0, 1], y=[0, 1], name='Random', line=dict(dash='dash')))
+                fig.update_layout(title='ROC Curve', xaxis_title='FPR', yaxis_title='TPR')
+                st.plotly_chart(fig, use_container_width=True)
         
         with col2:
-            st.subheader("Confusion Matrix")
-            if models:
-                selected_model = st.selectbox("Select model for confusion matrix:", list(models.keys()))
+            # Feature importance for Random Forest
+            if 'Random Forest' in st.session_state.models:
+                model = st.session_state.models['Random Forest']
+                X = df.drop(columns=[st.session_state.target_col])
+                X = pd.get_dummies(X, drop_first=True)
                 
-                if selected_model in models:
-                    model = models[selected_model]
-                    y_pred = model.predict(st.session_state.X_test)
-                    cm = confusion_matrix(st.session_state.y_test, y_pred)
-                    
-                    fig = px.imshow(cm, text_auto=True,
-                                  labels=dict(x="Predicted", y="Actual", color="Count"),
-                                  x=['Low Risk', 'High Risk'],
-                                  y=['Low Risk', 'High Risk'],
-                                  title=f'Confusion Matrix - {selected_model}',
-                                  color_continuous_scale='Blues')
-                    st.plotly_chart(fig, use_container_width=True)
+                importance_df = pd.DataFrame({
+                    'feature': X.columns,
+                    'importance': model.feature_importances_
+                }).sort_values('importance', ascending=False).head(10)
+                
+                fig = px.bar(importance_df, x='importance', y='feature', 
+                           title='Top 10 Feature Importance')
+                st.plotly_chart(fig, use_container_width=True)
         
-        # Feature importance
-        if 'Random Forest' in models:
-            st.subheader("🔍 Feature Importance")
-            rf_model = models['Random Forest']
+        # Simple insights
+        st.subheader("💡 Key Insights")
+        
+        best_model = st.session_state.results.loc[st.session_state.results['F1-Score'].idxmax(), 'Model']
+        best_score = st.session_state.results.loc[st.session_state.results['F1-Score'].idxmax(), 'F1-Score']
+        
+        st.write(f"**Best Model**: {best_model} (F1-Score: {best_score:.3f})")
+        
+        if 'Random Forest' in st.session_state.models:
+            st.write("**Top Features**:")
+            model = st.session_state.models['Random Forest']
+            X = df.drop(columns=[st.session_state.target_col])
+            X = pd.get_dummies(X, drop_first=True)
             
             importance_df = pd.DataFrame({
-                'Feature': st.session_state.feature_names,
-                'Importance': rf_model.feature_importances_
-            }).sort_values('Importance', ascending=False)
+                'feature': X.columns,
+                'importance': model.feature_importances_
+            }).sort_values('importance', ascending=False).head(3)
             
-            fig = px.bar(importance_df.head(10), x='Importance', y='Feature',
-                       title='Top 10 Most Important Features',
-                       color='Importance', color_continuous_scale='Viridis')
-            st.plotly_chart(fig, use_container_width=True)
-    
-    # Page 4: Recommendations
-    elif page == "💡 Recommendations":
-        st.header("💡 Clinical Recommendations & Insights")
-        
-        if not st.session_state.get('models') or st.session_state.results.empty:
-            st.info("👈 Please train models first to get recommendations")
-            return
-        
-        # Get best model
-        results_df = st.session_state.results
-        best_model_name = results_df.loc[results_df['F1-Score'].idxmax(), 'Model']
-        best_model = st.session_state.models[best_model_name]
-        
-        st.success(f"**Best Performing Model:** {best_model_name} (F1-Score: {results_df.loc[results_df['F1-Score'].idxmax(), 'F1-Score']:.3f})")
-        
-        # Feature-based recommendations
-        if hasattr(best_model, 'feature_importances_'):
-            importance_df = pd.DataFrame({
-                'Feature': st.session_state.feature_names,
-                'Importance': best_model.feature_importances_
-            }).sort_values('Importance', ascending=False)
-            
-            top_features = importance_df.head(3)
-            
-            st.subheader("🎯 Top Intervention Targets")
-            
-            for idx, (_, row) in enumerate(top_features.iterrows(), 1):
-                feature = row['Feature']
-                importance = row['Importance']
-                
-                with st.expander(f"{idx}. {feature} (Impact: {importance:.3f})"):
-                    if 'bmi' in feature.lower():
-                        st.markdown("""
-                        **Weight Management Strategy:**
-                        - Implement structured diet programs
-                        - Encourage 150+ minutes of weekly exercise
-                        - Regular BMI monitoring
-                        - Nutritional counseling sessions
-                        """)
-                    elif 'blood' in feature.lower() or 'pressure' in feature.lower():
-                        st.markdown("""
-                        **Blood Pressure Control:**
-                        - Regular BP monitoring (weekly)
-                        - Sodium intake reduction
-                        - Stress management techniques
-                        - Medication adherence support
-                        """)
-                    elif 'smoking' in feature.lower():
-                        st.markdown("""
-                        **Smoking Cessation Program:**
-                        - Nicotine replacement therapy
-                        - Behavioral counseling
-                        - Support group referrals
-                        - Regular follow-ups
-                        """)
-                    elif 'age' in feature.lower():
-                        st.markdown("""
-                        **Age-Appropriate Screening:**
-                        - Enhanced monitoring for age-related risks
-                        - Regular health check-ups
-                        - Preventive care emphasis
-                        - Lifestyle modification support
-                        """)
-                    else:
-                        st.markdown("""
-                        **General Health Intervention:**
-                        - Regular health screenings
-                        - Lifestyle modification programs
-                        - Patient education
-                        - Continuous monitoring
-                        """)
-        
-        # Risk stratification insight
-        st.subheader("📊 Population Health Insights")
-        
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
-            high_risk_pct = (df['target'].sum() / len(df)) * 100
-            st.metric("High Risk Population", f"{high_risk_pct:.1f}%")
-        
-        with col2:
-            avg_age = df['age'].mean()
-            st.metric("Average Age", f"{avg_age:.1f} years")
-        
-        with col3:
-            smoking_rate = (df['smoking'].sum() / len(df)) * 100
-            st.metric("Smoking Prevalence", f"{smoking_rate:.1f}%")
-        
-        # Actionable summary
-        st.subheader("🚀 Recommended Action Plan")
-        st.markdown("""
-        1. **Priority Screening** for high-risk individuals identified by the model
-        2. **Targeted Interventions** based on top predictive features
-        3. **Preventive Care** programs for moderate-risk population
-        4. **Continuous Monitoring** with regular model updates
-        5. **Stakeholder Education** on risk factors and prevention
-        """)
+            for _, row in importance_df.iterrows():
+                st.write(f"- {row['feature']} (importance: {row['importance']:.3f})")
 
 if __name__ == "__main__":
     main()
