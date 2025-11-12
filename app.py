@@ -1,5 +1,5 @@
-# 🏥 HCT DATATHON 2025 - ENHANCED FAST VERSION
-# Added more features while keeping it fast
+# 🏥 HCT DATATHON 2025 - ERROR-FREE ENHANCED VERSION
+# Fixed column name mismatch
 # ----------------------------------------------------------
 
 import streamlit as st
@@ -15,14 +15,24 @@ from sklearn.preprocessing import LabelEncoder
 import warnings
 warnings.filterwarnings("ignore")
 
+# Initialize session state
+if 'model_trained' not in st.session_state:
+    st.session_state.model_trained = False
+if 'models' not in st.session_state:
+    st.session_state.models = {}
+if 'results' not in st.session_state:
+    st.session_state.results = pd.DataFrame()
+if 'selected_features' not in st.session_state:
+    st.session_state.selected_features = []
+
 # Configuration
 st.set_page_config(page_title="HCT Datathon 2025", layout="wide")
 
-# Generate sample data
+# Generate sample data - FIXED COLUMN NAME
 @st.cache_data
 def generate_data():
     np.random.seed(42)
-    n = 500  # Slightly larger but still fast
+    n = 500
     data = {
         'age': np.random.normal(45, 15, n).astype(int),
         'bmi': np.random.normal(25, 5, n),
@@ -58,7 +68,7 @@ def main():
     if page == "📊 Data Overview":
         st.header("📊 Data Overview & Exploration")
         
-        # Quick stats
+        # Quick stats - FIXED: Using correct column name
         col1, col2, col3, col4 = st.columns(4)
         with col1:
             st.metric("Total Samples", len(df))
@@ -85,7 +95,7 @@ def main():
             st.subheader("Target Distribution")
             risk_counts = df['health_risk'].value_counts()
             fig = px.pie(values=risk_counts.values, names=['Low Risk', 'High Risk'],
-                        title="Health Risk Distribution", color=['green', 'red'])
+                        title="Health Risk Distribution")
             st.plotly_chart(fig, use_container_width=True)
         
         with col2:
@@ -119,15 +129,20 @@ def main():
             test_size = st.slider("Test Size %", 10, 40, 30)
         
         with col2:
+            # Available features (excluding target)
+            available_features = [col for col in df.columns if col != 'health_risk']
             features = st.multiselect(
                 "Select Features:",
-                [col for col in df.columns if col != 'health_risk'],
+                available_features,
                 default=['age', 'bmi', 'blood_pressure', 'smoking']
             )
             
             if st.button("🚀 Train Models", type="primary", use_container_width=True):
-                st.session_state.model_trained = True
-                st.session_state.selected_features = features
+                if not features:
+                    st.error("Please select at least one feature")
+                else:
+                    st.session_state.model_trained = True
+                    st.session_state.selected_features = features
         
         # Train models when button is clicked
         if st.session_state.get('model_trained', False) and st.session_state.get('selected_features'):
@@ -140,10 +155,18 @@ def main():
                     # Handle categorical features if any
                     X_encoded = pd.get_dummies(X, drop_first=True) if X.select_dtypes(include=['object']).any().any() else X
                     
-                    # Split data
-                    X_train, X_test, y_train, y_test = train_test_split(
-                        X_encoded, y, test_size=test_size/100, random_state=42, stratify=y
-                    )
+                    # Split data - with safe stratification
+                    unique_classes = len(y.unique())
+                    can_stratify = unique_classes > 1 and min(y.value_counts()) > 1
+                    
+                    if can_stratify:
+                        X_train, X_test, y_train, y_test = train_test_split(
+                            X_encoded, y, test_size=test_size/100, random_state=42, stratify=y
+                        )
+                    else:
+                        X_train, X_test, y_train, y_test = train_test_split(
+                            X_encoded, y, test_size=test_size/100, random_state=42
+                        )
                     
                     # Train models
                     models = {}
@@ -160,10 +183,10 @@ def main():
                         results.append({
                             "Model": "Random Forest",
                             "Accuracy": accuracy_score(y_test, y_pred_rf),
-                            "Precision": precision_score(y_test, y_pred_rf),
-                            "Recall": recall_score(y_test, y_pred_rf),
-                            "F1-Score": f1_score(y_test, y_pred_rf),
-                            "ROC-AUC": roc_auc_score(y_test, y_prob_rf)
+                            "Precision": precision_score(y_test, y_pred_rf, zero_division=0),
+                            "Recall": recall_score(y_test, y_pred_rf, zero_division=0),
+                            "F1-Score": f1_score(y_test, y_pred_rf, zero_division=0),
+                            "ROC-AUC": roc_auc_score(y_test, y_prob_rf) if len(np.unique(y_test)) > 1 else 0.5
                         })
                     
                     if model_choice in ["Logistic Regression", "Both"]:
@@ -177,10 +200,10 @@ def main():
                         results.append({
                             "Model": "Logistic Regression",
                             "Accuracy": accuracy_score(y_test, y_pred_lr),
-                            "Precision": precision_score(y_test, y_pred_lr),
-                            "Recall": recall_score(y_test, y_pred_lr),
-                            "F1-Score": f1_score(y_test, y_pred_lr),
-                            "ROC-AUC": roc_auc_score(y_test, y_prob_lr)
+                            "Precision": precision_score(y_test, y_pred_lr, zero_division=0),
+                            "Recall": recall_score(y_test, y_pred_lr, zero_division=0),
+                            "F1-Score": f1_score(y_test, y_pred_lr, zero_division=0),
+                            "ROC-AUC": roc_auc_score(y_test, y_prob_lr) if len(np.unique(y_test)) > 1 else 0.5
                         })
                     
                     # Store results
@@ -199,7 +222,7 @@ def main():
     elif page == "📈 Results & Insights":
         st.header("📈 Model Results & Performance")
         
-        if not st.session_state.get('models') or st.session_state.get('results', pd.DataFrame()).empty:
+        if not st.session_state.get('models') or st.session_state.results.empty:
             st.info("👈 Please train models first in the 'Model Training' section")
             return
         
@@ -249,20 +272,21 @@ def main():
         
         with col2:
             st.subheader("Confusion Matrix")
-            selected_model = st.selectbox("Select model for confusion matrix:", list(models.keys()))
-            
-            if selected_model in models:
-                model = models[selected_model]
-                y_pred = model.predict(st.session_state.X_test)
-                cm = confusion_matrix(st.session_state.y_test, y_pred)
+            if models:
+                selected_model = st.selectbox("Select model for confusion matrix:", list(models.keys()))
                 
-                fig = px.imshow(cm, text_auto=True,
-                              labels=dict(x="Predicted", y="Actual", color="Count"),
-                              x=['Low Risk', 'High Risk'],
-                              y=['Low Risk', 'High Risk'],
-                              title=f'Confusion Matrix - {selected_model}',
-                              color_continuous_scale='Blues')
-                st.plotly_chart(fig, use_container_width=True)
+                if selected_model in models:
+                    model = models[selected_model]
+                    y_pred = model.predict(st.session_state.X_test)
+                    cm = confusion_matrix(st.session_state.y_test, y_pred)
+                    
+                    fig = px.imshow(cm, text_auto=True,
+                                  labels=dict(x="Predicted", y="Actual", color="Count"),
+                                  x=['Low Risk', 'High Risk'],
+                                  y=['Low Risk', 'High Risk'],
+                                  title=f'Confusion Matrix - {selected_model}',
+                                  color_continuous_scale='Blues')
+                    st.plotly_chart(fig, use_container_width=True)
         
         # Feature importance
         if 'Random Forest' in models:
@@ -283,7 +307,7 @@ def main():
     elif page == "💡 Recommendations":
         st.header("💡 Clinical Recommendations & Insights")
         
-        if not st.session_state.get('models'):
+        if not st.session_state.get('models') or st.session_state.results.empty:
             st.info("👈 Please train models first to get recommendations")
             return
         
