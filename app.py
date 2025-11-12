@@ -1,4 +1,5 @@
-# 🏥 HCT DATATHON 2025 - SAFE FILE UPLOAD VERSION
+# 🏥 HCT DATATHON 2025 - ULTRA FAST VERSION
+# Minimal Streamlit app for maximum speed
 # ----------------------------------------------------------
 
 import streamlit as st
@@ -10,67 +11,68 @@ from sklearn.metrics import accuracy_score
 import warnings
 warnings.filterwarnings("ignore")
 
-st.set_page_config(page_title="HCT Safe", layout="centered")
+# Absolute minimal configuration
+st.set_page_config(page_title="HCT Fast", layout="centered")
+
+# Generate sample data directly (no file upload for now)
+@st.cache_data
+def generate_data():
+    np.random.seed(42)
+    n = 300  # Small dataset
+    data = {
+        'age': np.random.normal(45, 15, n),
+        'bmi': np.random.normal(25, 5, n),
+        'bp': np.random.normal(120, 15, n),
+    }
+    # Simple binary target
+    risk = data['age'] * 0.1 + data['bmi'] * 0.3 + np.random.normal(0, 3, n)
+    data['risk_high'] = (risk > risk.mean()).astype(int)
+    return pd.DataFrame(data)
 
 def main():
-    st.title("🏥 HCT Datathon - Safe Version")
+    st.title("🏥 HCT Datathon - Fast Demo")
     
-    # File upload
-    uploaded_file = st.file_uploader("Choose CSV file", type="csv")
+    # Load data once
+    if 'df' not in st.session_state:
+        st.session_state.df = generate_data()
     
-    if uploaded_file is not None:
-        try:
-            df = pd.read_csv(uploaded_file)
-            st.success(f"✅ Loaded: {len(df)} rows, {len(df.columns)} columns")
-            
-            # Show basic info
-            st.write("**Dataset Preview:**")
-            st.dataframe(df.head())
-            
-            # Target selection
-            target_col = st.selectbox("Select target column:", df.columns)
-            
-            if target_col:
-                st.write(f"Target distribution: {df[target_col].value_counts().to_dict()}")
-                
-                # Simple model
-                if st.button("🚀 Train Safe Model"):
-                    with st.spinner("Training safely..."):
-                        try:
-                            # Use only numeric features for safety
-                            numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
-                            if target_col in numeric_cols:
-                                numeric_cols.remove(target_col)
-                            
-                            if len(numeric_cols) > 0:
-                                X = df[numeric_cols]
-                                y = df[target_col]
-                                
-                                # Safe split without stratification
-                                X_train, X_test, y_train, y_test = train_test_split(
-                                    X, y, test_size=0.3, random_state=42
-                                )
-                                
-                                # Simple model
-                                model = RandomForestClassifier(n_estimators=10, random_state=42)
-                                model.fit(X_train, y_train)
-                                
-                                y_pred = model.predict(X_test)
-                                accuracy = accuracy_score(y_test, y_pred)
-                                
-                                st.success(f"✅ Safe training complete! Accuracy: {accuracy:.3f}")
-                                
-                            else:
-                                st.error("No numeric features found for modeling")
-                                
-                        except Exception as e:
-                            st.error(f"Training failed: {str(e)}")
-                            
-        except Exception as e:
-            st.error(f"Error loading file: {str(e)}")
+    df = st.session_state.df
     
-    else:
-        st.info("👆 Please upload a CSV file to begin")
+    # Simple interface
+    st.write(f"Data: {len(df)} samples, {len(df.columns)} features")
+    
+    # Show data
+    if st.checkbox("Show data preview"):
+        st.dataframe(df.head())
+    
+    # Quick model
+    if st.button("🚀 Train Quick Model"):
+        with st.spinner("Training..."):
+            # Simple preprocessing
+            X = df[['age', 'bmi', 'bp']]
+            y = df['risk_high']
+            
+            # Train/test split
+            X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42)
+            
+            # Simple model
+            model = RandomForestClassifier(n_estimators=10, random_state=42)  # Very small
+            model.fit(X_train, y_train)
+            
+            # Predict
+            y_pred = model.predict(X_test)
+            accuracy = accuracy_score(y_test, y_pred)
+            
+            st.success(f"✅ Model trained! Accuracy: {accuracy:.3f}")
+            
+            # Show feature importance
+            importance = pd.DataFrame({
+                'feature': X.columns,
+                'importance': model.feature_importances_
+            }).sort_values('importance', ascending=False)
+            
+            st.write("**Feature Importance:**")
+            st.dataframe(importance)
 
 if __name__ == "__main__":
     main()
