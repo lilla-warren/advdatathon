@@ -334,7 +334,7 @@ def main():
                         })
                     
                     if model_choice in ["Logistic Regression", "Both"]:
-                        lr = LogisticRegression(max_iter=1000, random_state=42)
+                        lr = LogisticRegression(max_iter=1000, random_state=42, multi_class='ovr')
                         lr.fit(X_train, y_train)
                         models['Logistic Regression'] = lr
                         
