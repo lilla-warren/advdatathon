@@ -199,7 +199,7 @@ def main():
         # 3️⃣ Enhanced Descriptive Analytics
         # ----------------------------------------------------------
         if analysis_type == "📊 Comprehensive EDA":
-            st.markdown('<div class="section-header">📊 Comprehensive Exploratory Data Analysis</div>', unsafe_allow_html=True>
+            st.markdown('<div class="section-header">📊 Comprehensive Exploratory Data Analysis</div>', unsafe_allow_html=True)
             
             # Dataset overview with enhanced metrics
             col1, col2, col3, col4 = st.columns(4)
@@ -289,12 +289,11 @@ def main():
                     # Class imbalance metrics
                     imbalance_ratio = target_counts.min() / target_counts.max()
                     st.metric("Class Imbalance Ratio", f"{imbalance_ratio:.3f}")
-        
-        # ----------------------------------------------------------
-        # 4️⃣ Enhanced Diagnostic Analytics
-        # ----------------------------------------------------------
-        elif analysis_type == "📊 Comprehensive EDA":
-            st.markdown('<div class="section-header">🔍 Advanced Diagnostic Analytics</div>', unsafe_allow_html=True>
+            
+            # ----------------------------------------------------------
+            # 4️⃣ Enhanced Diagnostic Analytics within EDA
+            # ----------------------------------------------------------
+            st.markdown('<div class="section-header">🔍 Advanced Diagnostic Analytics</div>', unsafe_allow_html=True)
             
             # Correlation analysis
             st.subheader("📈 Correlation Analysis")
@@ -345,7 +344,7 @@ def main():
         # 5️⃣ Enhanced Predictive Analytics
         # ----------------------------------------------------------
         elif analysis_type == "🤖 Advanced Modeling":
-            st.markdown('<div class="section-header">🤖 Advanced Predictive Modeling</div>', unsafe_allow_html=True>
+            st.markdown('<div class="section-header">🤖 Advanced Predictive Modeling</div>', unsafe_allow_html=True)
             
             if not analytics.target_col:
                 st.warning("⚠️ Please select a target variable in the sidebar.")
@@ -584,7 +583,7 @@ def main():
         # 6️⃣ Enhanced Explainability & Transparency
         # ----------------------------------------------------------
         elif analysis_type == "🧮 Model Explainability":
-            st.markdown('<div class="section-header">🧮 Advanced Model Explainability</div>', unsafe_allow_html=True>
+            st.markdown('<div class="section-header">🧮 Advanced Model Explainability</div>', unsafe_allow_html=True)
             
             if not analytics.models:
                 st.warning("⚠️ Please train models first in the Advanced Modeling section.")
@@ -682,7 +681,7 @@ def main():
         # 7️⃣ Enhanced Prescriptive Analytics
         # ----------------------------------------------------------
         elif analysis_type == "💡 Prescriptive Insights":
-            st.markdown('<div class="section-header">💡 Advanced Prescriptive Analytics</div>', unsafe_allow_html=True>
+            st.markdown('<div class="section-header">💡 Advanced Prescriptive Analytics</div>', unsafe_allow_html=True)
             
             if not analytics.models:
                 st.warning("⚠️ Please train models first to generate insights.")
@@ -793,7 +792,7 @@ def main():
         # 8️⃣ Enhanced Ethics & Governance
         # ----------------------------------------------------------
         elif analysis_type == "⚖️ Ethics & Governance":
-            st.markdown('<div class="section-header">⚖️ Ethics, Governance & Responsible AI</div>', unsafe_allow_html=True>
+            st.markdown('<div class="section-header">⚖️ Ethics, Governance & Responsible AI</div>', unsafe_allow_html=True)
             
             st.markdown("""
             <div class="ethical-alert">
